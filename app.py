@@ -151,11 +151,25 @@ def transcribe_audio_file(file_path, filename, enable_diarization=False):
                     chunking_strategy="auto"
                 )
                 # Format the diarized response
-                if hasattr(response, 'segments'):
+                print(f"Response type: {type(response)}")
+                print(f"Response attributes: {dir(response)}")
+
+                # Handle different response formats
+                if hasattr(response, 'segments') and response.segments:
                     return format_diarized_transcript(response.segments)
+                elif hasattr(response, 'text'):
+                    return response.text
                 else:
-                    # Fallback if segments not available
-                    return response.text if hasattr(response, 'text') else str(response)
+                    # Try to convert to dict if possible
+                    try:
+                        response_dict = response.model_dump() if hasattr(response, 'model_dump') else dict(response)
+                        if 'segments' in response_dict:
+                            return format_diarized_transcript(response_dict['segments'])
+                        elif 'text' in response_dict:
+                            return response_dict['text']
+                    except:
+                        pass
+                    return str(response)
             else:
                 response = client.audio.transcriptions.create(
                     model=model,
@@ -187,10 +201,22 @@ def transcribe_audio_file(file_path, filename, enable_diarization=False):
                         chunking_strategy="auto"
                     )
                     # Format the diarized response
-                    if hasattr(response, 'segments'):
+                    if hasattr(response, 'segments') and response.segments:
                         transcripts.append(format_diarized_transcript(response.segments))
+                    elif hasattr(response, 'text'):
+                        transcripts.append(response.text)
                     else:
-                        transcripts.append(response.text if hasattr(response, 'text') else str(response))
+                        # Try to convert to dict if possible
+                        try:
+                            response_dict = response.model_dump() if hasattr(response, 'model_dump') else dict(response)
+                            if 'segments' in response_dict:
+                                transcripts.append(format_diarized_transcript(response_dict['segments']))
+                            elif 'text' in response_dict:
+                                transcripts.append(response_dict['text'])
+                            else:
+                                transcripts.append(str(response))
+                        except:
+                            transcripts.append(str(response))
                 else:
                     response = client.audio.transcriptions.create(
                         model=model,
