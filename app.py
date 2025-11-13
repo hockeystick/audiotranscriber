@@ -27,10 +27,10 @@ CHUNK_LENGTH_MS = 10 * 60 * 1000  # 10 minutes per chunk in milliseconds
 
 # Initialize OpenAI client
 # API key is read from environment variable OPENAI_API_KEY
-try:
-    client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
-except Exception as e:
-    print(f"Warning: OpenAI client initialization issue: {e}")
+api_key = os.environ.get('OPENAI_API_KEY')
+if api_key:
+    client = OpenAI(api_key=api_key)
+else:
     client = None
 
 
@@ -247,4 +247,6 @@ if __name__ == '__main__':
 
     # Run the Flask development server
     # In production, use a proper WSGI server like gunicorn
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # Using port 8000 to avoid conflicts with macOS AirPlay on port 5000
+    port = int(os.environ.get('PORT', 8000))
+    app.run(debug=True, host='0.0.0.0', port=port)

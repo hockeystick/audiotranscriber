@@ -103,9 +103,11 @@ set OPENAI_API_KEY=your-api-key-here
 python app.py
 ```
 
-The application will start on `http://localhost:5000`
+The application will start on `http://localhost:8000`
 
-Open your browser and navigate to `http://localhost:5000` to use the app.
+Open your browser and navigate to `http://localhost:8000` to use the app.
+
+**Note**: The app uses port 8000 by default to avoid conflicts with macOS AirPlay (which uses port 5000). You can change the port by setting the `PORT` environment variable: `PORT=5000 python app.py`
 
 ## Usage
 
@@ -261,10 +263,10 @@ Make sure you've set the environment variable before running the app. See step 4
 
 ### Port already in use
 
-If port 5000 is already in use, you can change it by modifying the `app.run()` call in `app.py`:
+The app now uses port 8000 by default to avoid conflicts with macOS AirPlay. If you need to use a different port, set the `PORT` environment variable:
 
-```python
-app.run(debug=True, host='0.0.0.0', port=8000)
+```bash
+PORT=9000 python app.py
 ```
 
 ### "ffmpeg not found" or audio processing errors
