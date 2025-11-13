@@ -2,8 +2,8 @@
 Flask==3.0.0
 
 # OpenAI Python SDK for API access
-# Upgraded to 1.12.0 for diarization support (gpt-4o-transcribe-diarize)
-openai==1.12.0
+# Using latest version for full diarization support with chunking_strategy
+openai==1.54.3
 
 # Audio processing library for handling large files
 # Note: Requires ffmpeg to be installed on the system

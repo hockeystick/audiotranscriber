@@ -143,12 +143,12 @@ def transcribe_audio_file(file_path, filename, enable_diarization=False):
         print("File is within size limit, transcribing directly...")
         with open(file_path, 'rb') as audio_file:
             if enable_diarization:
-                # Diarization with SDK 1.12.0
-                # Note: chunking_strategy not supported in this SDK version
+                # Diarization requires chunking_strategy parameter
                 response = client.audio.transcriptions.create(
                     model=model,
                     file=audio_file,
-                    response_format="diarized_json"
+                    response_format="diarized_json",
+                    chunking_strategy="auto"
                 )
                 # Format the diarized response
                 if hasattr(response, 'segments'):
@@ -179,12 +179,12 @@ def transcribe_audio_file(file_path, filename, enable_diarization=False):
 
             with open(chunk_file, 'rb') as audio_file:
                 if enable_diarization:
-                    # Diarization with SDK 1.12.0
-                    # Note: chunking_strategy not supported in this SDK version
+                    # Diarization requires chunking_strategy parameter
                     response = client.audio.transcriptions.create(
                         model=model,
                         file=audio_file,
-                        response_format="diarized_json"
+                        response_format="diarized_json",
+                        chunking_strategy="auto"
                     )
                     # Format the diarized response
                     if hasattr(response, 'segments'):
