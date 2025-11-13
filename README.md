@@ -1,12 +1,12 @@
 # MP3 Audio Transcriber
 
-A minimal web application that transcribes MP3 audio files using the OpenAI Audio Transcription API (Whisper).
+A minimal web application that transcribes MP3 audio files using OpenAI's latest GPT-4o Mini transcription model for high-quality results.
 
 ## Features
 
 - Upload MP3, WAV, or M4A audio files (up to 200MB)
 - **Large file support**: Automatically splits files larger than 25MB into chunks
-- Automatic transcription using OpenAI's Whisper model
+- **High-quality transcription** using OpenAI's GPT-4o Mini model
 - View transcript directly in the browser
 - Download transcript as a .txt file
 - Clean, responsive user interface
@@ -16,7 +16,7 @@ A minimal web application that transcribes MP3 audio files using the OpenAI Audi
 ## Tech Stack
 
 - **Backend**: Flask (Python)
-- **AI**: OpenAI Audio Transcription API (Whisper)
+- **AI**: OpenAI GPT-4o Mini Transcription Model (`gpt-4o-mini-transcribe`)
 - **Frontend**: Server-rendered HTML with embedded CSS
 - **Deployment**: Gunicorn WSGI server (production-ready)
 
