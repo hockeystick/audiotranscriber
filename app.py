@@ -144,12 +144,21 @@ def transcribe_audio_file(file_path, filename, enable_diarization=False):
         with open(file_path, 'rb') as audio_file:
             if enable_diarization:
                 # Diarization requires specific parameters
-                response = client.audio.transcriptions.create(
-                    model=model,
-                    file=audio_file,
-                    response_format="diarized_json",
-                    chunking_strategy="auto"
-                )
+                # Note: chunking_strategy may not be supported in older SDK versions
+                try:
+                    response = client.audio.transcriptions.create(
+                        model=model,
+                        file=audio_file,
+                        response_format="diarized_json",
+                        extra_body={"chunking_strategy": "auto"}
+                    )
+                except TypeError:
+                    # Fall back without chunking_strategy if not supported
+                    response = client.audio.transcriptions.create(
+                        model=model,
+                        file=audio_file,
+                        response_format="diarized_json"
+                    )
                 # Format the diarized response
                 if hasattr(response, 'segments'):
                     return format_diarized_transcript(response.segments)
@@ -179,12 +188,20 @@ def transcribe_audio_file(file_path, filename, enable_diarization=False):
 
             with open(chunk_file, 'rb') as audio_file:
                 if enable_diarization:
-                    response = client.audio.transcriptions.create(
-                        model=model,
-                        file=audio_file,
-                        response_format="diarized_json",
-                        chunking_strategy="auto"
-                    )
+                    try:
+                        response = client.audio.transcriptions.create(
+                            model=model,
+                            file=audio_file,
+                            response_format="diarized_json",
+                            extra_body={"chunking_strategy": "auto"}
+                        )
+                    except TypeError:
+                        # Fall back without chunking_strategy if not supported
+                        response = client.audio.transcriptions.create(
+                            model=model,
+                            file=audio_file,
+                            response_format="diarized_json"
+                        )
                     # Format the diarized response
                     if hasattr(response, 'segments'):
                         transcripts.append(format_diarized_transcript(response.segments))
