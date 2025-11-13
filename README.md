@@ -34,7 +34,7 @@ A minimal web application that transcribes MP3 audio files using the OpenAI Audi
 ### 1. Clone or Download the Repository
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/hockeystick/audiotranscriber.git
 cd audiotranscriber
 ```
 
