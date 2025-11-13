@@ -4,6 +4,10 @@ Flask==3.0.0
 # OpenAI Python SDK for API access
 openai==1.54.3
 
+# Audio processing library for handling large files
+# Note: Requires ffmpeg to be installed on the system
+pydub==0.25.1
+
 # WSGI server for production deployment
 gunicorn==21.2.0
 

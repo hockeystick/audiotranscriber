@@ -3,6 +3,7 @@ MP3 Audio Transcription Web App
 ================================
 A Flask application that allows users to upload MP3 files and transcribe them
 using the OpenAI Audio Transcription API.
+Supports large files by automatically splitting them into chunks.
 """
 
 import os
@@ -11,6 +12,8 @@ from werkzeug.utils import secure_filename
 from openai import OpenAI
 import tempfile
 from io import BytesIO
+from pydub import AudioSegment
+import math
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -18,7 +21,9 @@ app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-producti
 
 # Configure upload settings
 ALLOWED_EXTENSIONS = {'mp3', 'mpeg', 'wav', 'm4a'}
-MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB limit (OpenAI's limit)
+MAX_FILE_SIZE = 200 * 1024 * 1024  # 200MB limit for uploads
+OPENAI_MAX_SIZE = 24 * 1024 * 1024  # 24MB - OpenAI's API limit (stay under 25MB)
+CHUNK_LENGTH_MS = 10 * 60 * 1000  # 10 minutes per chunk in milliseconds
 
 # Initialize OpenAI client
 # API key is read from environment variable OPENAI_API_KEY
@@ -40,6 +45,106 @@ def allowed_file(filename):
         Boolean indicating if the file extension is allowed
     """
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def split_audio_file(file_path, chunk_length_ms=CHUNK_LENGTH_MS):
+    """
+    Split a large audio file into smaller chunks for processing.
+
+    Args:
+        file_path: Path to the audio file
+        chunk_length_ms: Length of each chunk in milliseconds
+
+    Returns:
+        List of paths to temporary chunk files
+    """
+    print(f"Loading audio file for chunking: {file_path}")
+
+    # Load the audio file
+    audio = AudioSegment.from_file(file_path)
+
+    # Calculate the number of chunks needed
+    total_length_ms = len(audio)
+    num_chunks = math.ceil(total_length_ms / chunk_length_ms)
+
+    print(f"Audio length: {total_length_ms/1000:.1f}s, splitting into {num_chunks} chunks")
+
+    chunk_files = []
+
+    # Split the audio into chunks
+    for i in range(num_chunks):
+        start_ms = i * chunk_length_ms
+        end_ms = min((i + 1) * chunk_length_ms, total_length_ms)
+
+        chunk = audio[start_ms:end_ms]
+
+        # Create a temporary file for this chunk
+        chunk_file = tempfile.NamedTemporaryFile(delete=False, suffix='.mp3')
+        chunk.export(chunk_file.name, format="mp3")
+        chunk_files.append(chunk_file.name)
+
+        print(f"  Chunk {i+1}/{num_chunks}: {start_ms/1000:.1f}s to {end_ms/1000:.1f}s")
+
+    return chunk_files
+
+
+def transcribe_audio_file(file_path, filename):
+    """
+    Transcribe an audio file, automatically handling large files by chunking.
+
+    Args:
+        file_path: Path to the audio file
+        filename: Original filename (for logging)
+
+    Returns:
+        The complete transcript as a string
+    """
+    file_size = os.path.getsize(file_path)
+    print(f"File size: {file_size / (1024*1024):.2f}MB")
+
+    # If file is small enough, transcribe directly
+    if file_size <= OPENAI_MAX_SIZE:
+        print("File is within size limit, transcribing directly...")
+        with open(file_path, 'rb') as audio_file:
+            response = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file,
+                response_format="text"
+            )
+        return response
+
+    # File is too large, need to split into chunks
+    print("File exceeds size limit, splitting into chunks...")
+    chunk_files = []
+
+    try:
+        # Split the audio file into chunks
+        chunk_files = split_audio_file(file_path)
+
+        # Transcribe each chunk
+        transcripts = []
+        for i, chunk_file in enumerate(chunk_files):
+            print(f"Transcribing chunk {i+1}/{len(chunk_files)}...")
+
+            with open(chunk_file, 'rb') as audio_file:
+                response = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file,
+                    response_format="text"
+                )
+                transcripts.append(response)
+
+        # Combine all transcripts
+        complete_transcript = " ".join(transcripts)
+        print("All chunks transcribed successfully")
+
+        return complete_transcript
+
+    finally:
+        # Clean up chunk files
+        for chunk_file in chunk_files:
+            if os.path.exists(chunk_file):
+                os.unlink(chunk_file)
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -86,20 +191,9 @@ def index():
                 temp_file_path = temp_file.name
 
             try:
-                # Send the audio file to OpenAI for transcription
+                # Transcribe the audio file (handles both small and large files)
                 print(f"Transcribing file: {filename}")
-
-                with open(temp_file_path, 'rb') as audio_file:
-                    # Call OpenAI Audio Transcription API
-                    # Using whisper-1 model which is reliable and cost-effective
-                    response = client.audio.transcriptions.create(
-                        model="whisper-1",
-                        file=audio_file,
-                        response_format="text"  # Plain text output
-                    )
-
-                # Extract transcript from response
-                transcript = response
+                transcript = transcribe_audio_file(temp_file_path, filename)
                 print("Transcription successful")
 
                 flash('Transcription completed successfully!', 'success')

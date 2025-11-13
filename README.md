@@ -4,12 +4,14 @@ A minimal web application that transcribes MP3 audio files using the OpenAI Audi
 
 ## Features
 
-- Upload MP3, WAV, or M4A audio files (up to 25MB)
+- Upload MP3, WAV, or M4A audio files (up to 200MB)
+- **Large file support**: Automatically splits files larger than 25MB into chunks
 - Automatic transcription using OpenAI's Whisper model
 - View transcript directly in the browser
 - Download transcript as a .txt file
 - Clean, responsive user interface
 - Comprehensive error handling
+- Progress logging for chunk processing
 
 ## Tech Stack
 
@@ -22,6 +24,10 @@ A minimal web application that transcribes MP3 audio files using the OpenAI Audi
 
 - Python 3.8 or higher
 - An OpenAI API key ([Get one here](https://platform.openai.com/api-keys))
+- FFmpeg (required for processing audio files)
+  - **macOS**: `brew install ffmpeg`
+  - **Ubuntu/Debian**: `sudo apt-get install ffmpeg`
+  - **Windows**: Download from [ffmpeg.org](https://ffmpeg.org/download.html) or use `choco install ffmpeg`
 
 ## Local Setup
 
@@ -32,7 +38,27 @@ git clone <repository-url>
 cd audiotranscriber
 ```
 
-### 2. Create a Virtual Environment
+### 2. Install FFmpeg
+
+FFmpeg is required for processing audio files:
+
+```bash
+# macOS
+brew install ffmpeg
+
+# Ubuntu/Debian
+sudo apt-get update && sudo apt-get install ffmpeg
+
+# Windows (with Chocolatey)
+choco install ffmpeg
+```
+
+Verify installation:
+```bash
+ffmpeg -version
+```
+
+### 3. Create a Virtual Environment
 
 ```bash
 # Create virtual environment
@@ -45,13 +71,13 @@ source venv/bin/activate
 venv\Scripts\activate
 ```
 
-### 3. Install Dependencies
+### 4. Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Set Environment Variables
+### 5. Set Environment Variables
 
 Create a `.env` file in the project root or export the variables directly:
 
@@ -71,7 +97,7 @@ set OPENAI_API_KEY=your-api-key-here
 - `OPENAI_API_KEY`: Your OpenAI API key (required)
 - `SECRET_KEY`: Flask secret key (optional, defaults to a dev key)
 
-### 5. Run the Application
+### 6. Run the Application
 
 ```bash
 python app.py
@@ -88,6 +114,20 @@ Open your browser and navigate to `http://localhost:5000` to use the app.
 3. Wait for the transcription to complete (may take a few moments for long files)
 4. View the transcript in the text area
 5. Click "Download .txt" to save the transcript to your computer
+
+### How Large File Processing Works
+
+OpenAI's Whisper API has a 25MB file size limit. This app automatically handles larger files:
+
+1. **Files ≤ 24MB**: Transcribed directly in a single API call
+2. **Files > 24MB**: Automatically split into 10-minute chunks, transcribed separately, then combined
+
+**Example**: A 58MB file (≈40 minutes) will be:
+- Split into 4 chunks of ~10 minutes each
+- Each chunk transcribed via OpenAI API
+- Transcripts combined into a single result
+
+This process is completely automatic and transparent to the user. Progress is logged to the server console.
 
 ## Project Structure
 
@@ -109,10 +149,12 @@ audiotranscriber/
 1. Create a new Web Service on [Render](https://render.com)
 2. Connect your Git repository
 3. Configure the service:
-   - **Build Command**: `pip install -r requirements.txt`
+   - **Build Command**: `apt-get update && apt-get install -y ffmpeg && pip install -r requirements.txt`
    - **Start Command**: `gunicorn app:app`
    - **Environment Variables**: Add `OPENAI_API_KEY`
 4. Deploy!
+
+**Note**: Render's native environment includes ffmpeg, but if you encounter issues, you can use the build command above to ensure it's installed.
 
 ### Deploy to Railway
 
@@ -120,25 +162,33 @@ audiotranscriber/
 2. Connect your Git repository
 3. Railway will auto-detect the Python app
 4. Add environment variable `OPENAI_API_KEY` in the settings
-5. Deploy!
+5. Add a build command if needed: `apt-get update && apt-get install -y ffmpeg && pip install -r requirements.txt`
+6. Deploy!
+
+**Note**: Railway typically includes ffmpeg in their base images.
 
 ### Deploy to Heroku
 
 1. Install the Heroku CLI
 2. Create a `Procfile` with: `web: gunicorn app:app`
-3. Run:
+3. Add the ffmpeg buildpack and deploy:
 
 ```bash
 heroku create your-app-name
+heroku buildpacks:add --index 1 https://github.com/jonathanong/heroku-buildpack-ffmpeg-latest.git
+heroku buildpacks:add --index 2 heroku/python
 heroku config:set OPENAI_API_KEY=your-api-key-here
 git push heroku main
 ```
+
+**Note**: The ffmpeg buildpack is required for processing large audio files.
 
 ### General PaaS Deployment
 
 Most Platform-as-a-Service providers support Python apps. You'll need:
 
-- **Build Command**: `pip install -r requirements.txt`
+- **System Dependencies**: Ensure ffmpeg is installed (most modern PaaS providers include it)
+- **Build Command**: `pip install -r requirements.txt` (or `apt-get install -y ffmpeg && pip install -r requirements.txt` if ffmpeg is not available)
 - **Start Command**: `gunicorn app:app --bind 0.0.0.0:$PORT`
 - **Environment Variables**: Set `OPENAI_API_KEY`
 
@@ -146,7 +196,13 @@ Most Platform-as-a-Service providers support Python apps. You'll need:
 
 ### File Size Limits
 
-The app enforces OpenAI's 25MB file size limit. To change this, modify the `MAX_FILE_SIZE` constant in `app.py`.
+The app supports files up to 200MB by default. Files larger than 24MB are automatically split into chunks for processing.
+
+- `MAX_FILE_SIZE`: Maximum upload size (default: 200MB)
+- `OPENAI_MAX_SIZE`: OpenAI's API limit (24MB) - files larger than this are automatically chunked
+- `CHUNK_LENGTH_MS`: Length of each audio chunk (default: 10 minutes)
+
+To modify these limits, edit the constants at the top of `app.py`.
 
 ### Supported Audio Formats
 
@@ -183,7 +239,12 @@ The app handles common errors gracefully:
 OpenAI charges for transcription based on audio length:
 - Whisper API: $0.006 per minute of audio
 
-A 30-minute MP3 would cost approximately $0.18 to transcribe.
+**Examples**:
+- 30-minute MP3: ~$0.18
+- 60-minute MP3: ~$0.36
+- 120-minute MP3: ~$0.72
+
+**Note**: Large files are automatically split into chunks and transcribed separately. The cost is based on the total audio duration, regardless of whether it's processed as one file or multiple chunks.
 
 ## Troubleshooting
 
@@ -205,6 +266,15 @@ If port 5000 is already in use, you can change it by modifying the `app.run()` c
 ```python
 app.run(debug=True, host='0.0.0.0', port=8000)
 ```
+
+### "ffmpeg not found" or audio processing errors
+
+If you see errors related to ffmpeg or audio processing:
+
+1. Verify ffmpeg is installed: `ffmpeg -version`
+2. Make sure it's in your system PATH
+3. On Windows, you may need to restart your terminal after installing ffmpeg
+4. For deployment, ensure the platform has ffmpeg available (see deployment sections above)
 
 ## Development
 
