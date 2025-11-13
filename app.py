@@ -144,12 +144,23 @@ def transcribe_audio_file(file_path, filename, enable_diarization=False):
         with open(file_path, 'rb') as audio_file:
             if enable_diarization:
                 # Diarization requires chunking_strategy parameter
-                response = client.audio.transcriptions.create(
-                    model=model,
-                    file=audio_file,
-                    response_format="diarized_json",
-                    chunking_strategy="auto"
-                )
+                # Try verbose_json format which includes more metadata
+                try:
+                    response = client.audio.transcriptions.create(
+                        model=model,
+                        file=audio_file,
+                        response_format="verbose_json",
+                        chunking_strategy="auto"
+                    )
+                except Exception as e:
+                    print(f"Verbose JSON failed: {e}, trying text format")
+                    # Fallback to text format
+                    response = client.audio.transcriptions.create(
+                        model=model,
+                        file=audio_file,
+                        response_format="text",
+                        chunking_strategy="auto"
+                    )
                 # Format the diarized response
                 print(f"Response type: {type(response)}")
                 print(f"Response attributes: {dir(response)}")
@@ -194,12 +205,22 @@ def transcribe_audio_file(file_path, filename, enable_diarization=False):
             with open(chunk_file, 'rb') as audio_file:
                 if enable_diarization:
                     # Diarization requires chunking_strategy parameter
-                    response = client.audio.transcriptions.create(
-                        model=model,
-                        file=audio_file,
-                        response_format="diarized_json",
-                        chunking_strategy="auto"
-                    )
+                    try:
+                        response = client.audio.transcriptions.create(
+                            model=model,
+                            file=audio_file,
+                            response_format="verbose_json",
+                            chunking_strategy="auto"
+                        )
+                    except Exception as e:
+                        print(f"Verbose JSON failed: {e}, trying text format")
+                        # Fallback to text format
+                        response = client.audio.transcriptions.create(
+                            model=model,
+                            file=audio_file,
+                            response_format="text",
+                            chunking_strategy="auto"
+                        )
                     # Format the diarized response
                     if hasattr(response, 'segments') and response.segments:
                         transcripts.append(format_diarized_transcript(response.segments))
