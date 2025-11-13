@@ -4,15 +4,15 @@ A minimal web application that transcribes MP3 audio files using OpenAI's latest
 
 ## Features
 
-- Upload MP3, WAV, or M4A audio files (up to 200MB)
-- **Large file support**: Automatically splits files larger than 25MB into chunks
-- **High-quality transcription** using OpenAI's GPT-4o Mini model
-- **Speaker diarization**: Optional speaker identification to distinguish different speakers in conversations
-- View transcript directly in the browser
-- Download transcript as a .txt file
-- Clean, responsive user interface
-- Comprehensive error handling
-- Progress logging for chunk processing
+- 🎵 Upload MP3, WAV, or M4A audio files (up to 200MB)
+- 🚀 **Large file support**: Automatically splits files larger than 25MB into chunks
+- ✨ **High-quality transcription** using OpenAI's GPT-4o Mini model
+- 📊 **Real-time progress bar**: Visual feedback during transcription
+- 💻 **Native Mac Application**: Double-click launcher for easy access
+- 📝 View transcript directly in the browser
+- ⬇️ Download transcript as a .txt file
+- 🎨 Clean, responsive user interface
+- ✅ Comprehensive error handling
 
 ## Tech Stack
 
@@ -112,33 +112,30 @@ Open your browser and navigate to `http://localhost:8000` to use the app.
 
 ## Usage
 
+### As a Mac Application (Recommended for macOS)
+
+1. **One-time setup**: Run `bash create_mac_app.sh` in the project directory
+2. **Double-click** "MP3 Audio Transcriber.app" to launch
+3. The app opens in Terminal and your browser automatically
+4. Upload your audio file and transcribe!
+
+### Manual Start (All Platforms)
+
+```bash
+# Make the launcher executable (first time only)
+chmod +x start_app.sh
+
+# Start the app
+./start_app.sh
+```
+
+### Using the Web Interface
+
 1. Click "Choose File" and select an MP3 audio file from your computer
-2. (Optional) Check "Enable Speaker Identification" if you want to identify different speakers
-3. Click the "Transcribe Audio" button
-4. Wait for the transcription to complete (may take a few moments for long files)
-5. View the transcript in the text area
-6. Click "Download .txt" to save the transcript to your computer
-
-### Speaker Diarization
-
-When you enable "Speaker Identification", the app will:
-- Use OpenAI's `gpt-4o-transcribe-diarize` model
-- Identify different speakers in the audio
-- Label each segment with the speaker (e.g., "Speaker 0", "Speaker 1", etc.)
-- Format the output for easy readability
-
-**Example output with diarization:**
-```
-Speaker 0: Hello, welcome to today's meeting.
-Speaker 1: Thanks for having me. I'm excited to discuss the project.
-Speaker 0: Great! Let's start with the overview.
-```
-
-**Note**: Speaker diarization works best with:
-- Clear audio quality
-- Distinct voices
-- Minimal background noise
-- Audio longer than 30 seconds
+2. Click the "Transcribe Audio" button
+3. Watch the progress bar as your file is transcribed
+4. View the transcript in the text area
+5. Click "Download .txt" to save the transcript to your computer
 
 ### How Large File Processing Works
 

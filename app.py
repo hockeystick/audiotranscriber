@@ -119,75 +119,33 @@ def format_diarized_transcript(segments):
     return "".join(formatted_lines).strip()
 
 
-def transcribe_audio_file(file_path, filename, enable_diarization=False):
+def transcribe_audio_file(file_path, filename):
     """
     Transcribe an audio file, automatically handling large files by chunking.
 
     Args:
         file_path: Path to the audio file
         filename: Original filename (for logging)
-        enable_diarization: If True, use speaker diarization
 
     Returns:
         The complete transcript as a string
     """
     file_size = os.path.getsize(file_path)
     print(f"File size: {file_size / (1024*1024):.2f}MB")
-    print(f"Diarization: {'enabled' if enable_diarization else 'disabled'}")
 
-    # Choose model based on diarization setting
-    model = "gpt-4o-transcribe-diarize" if enable_diarization else "gpt-4o-mini-transcribe"
+    # Use GPT-4o Mini for high-quality, reliable transcription
+    model = "gpt-4o-mini-transcribe"
 
     # If file is small enough, transcribe directly
     if file_size <= OPENAI_MAX_SIZE:
         print("File is within size limit, transcribing directly...")
         with open(file_path, 'rb') as audio_file:
-            if enable_diarization:
-                # Diarization requires chunking_strategy parameter
-                # Try verbose_json format which includes more metadata
-                try:
-                    response = client.audio.transcriptions.create(
-                        model=model,
-                        file=audio_file,
-                        response_format="verbose_json",
-                        chunking_strategy="auto"
-                    )
-                except Exception as e:
-                    print(f"Verbose JSON failed: {e}, trying text format")
-                    # Fallback to text format
-                    response = client.audio.transcriptions.create(
-                        model=model,
-                        file=audio_file,
-                        response_format="text",
-                        chunking_strategy="auto"
-                    )
-                # Format the diarized response
-                print(f"Response type: {type(response)}")
-                print(f"Response attributes: {dir(response)}")
-
-                # Handle different response formats
-                if hasattr(response, 'segments') and response.segments:
-                    return format_diarized_transcript(response.segments)
-                elif hasattr(response, 'text'):
-                    return response.text
-                else:
-                    # Try to convert to dict if possible
-                    try:
-                        response_dict = response.model_dump() if hasattr(response, 'model_dump') else dict(response)
-                        if 'segments' in response_dict:
-                            return format_diarized_transcript(response_dict['segments'])
-                        elif 'text' in response_dict:
-                            return response_dict['text']
-                    except:
-                        pass
-                    return str(response)
-            else:
-                response = client.audio.transcriptions.create(
-                    model=model,
-                    file=audio_file,
-                    response_format="text"
-                )
-                return response
+            response = client.audio.transcriptions.create(
+                model=model,
+                file=audio_file,
+                response_format="text"
+            )
+            return response
 
     # File is too large, need to split into chunks
     print("File exceeds size limit, splitting into chunks...")
@@ -203,48 +161,12 @@ def transcribe_audio_file(file_path, filename, enable_diarization=False):
             print(f"Transcribing chunk {i+1}/{len(chunk_files)}...")
 
             with open(chunk_file, 'rb') as audio_file:
-                if enable_diarization:
-                    # Diarization requires chunking_strategy parameter
-                    try:
-                        response = client.audio.transcriptions.create(
-                            model=model,
-                            file=audio_file,
-                            response_format="verbose_json",
-                            chunking_strategy="auto"
-                        )
-                    except Exception as e:
-                        print(f"Verbose JSON failed: {e}, trying text format")
-                        # Fallback to text format
-                        response = client.audio.transcriptions.create(
-                            model=model,
-                            file=audio_file,
-                            response_format="text",
-                            chunking_strategy="auto"
-                        )
-                    # Format the diarized response
-                    if hasattr(response, 'segments') and response.segments:
-                        transcripts.append(format_diarized_transcript(response.segments))
-                    elif hasattr(response, 'text'):
-                        transcripts.append(response.text)
-                    else:
-                        # Try to convert to dict if possible
-                        try:
-                            response_dict = response.model_dump() if hasattr(response, 'model_dump') else dict(response)
-                            if 'segments' in response_dict:
-                                transcripts.append(format_diarized_transcript(response_dict['segments']))
-                            elif 'text' in response_dict:
-                                transcripts.append(response_dict['text'])
-                            else:
-                                transcripts.append(str(response))
-                        except:
-                            transcripts.append(str(response))
-                else:
-                    response = client.audio.transcriptions.create(
-                        model=model,
-                        file=audio_file,
-                        response_format="text"
-                    )
-                    transcripts.append(response)
+                response = client.audio.transcriptions.create(
+                    model=model,
+                    file=audio_file,
+                    response_format="text"
+                )
+                transcripts.append(response)
 
         # Combine all transcripts
         complete_transcript = "\n\n".join(transcripts)
@@ -297,9 +219,6 @@ def index():
             # We need to save it because OpenAI API expects a file-like object with a name
             filename = secure_filename(file.filename)
 
-            # Check if diarization is enabled
-            enable_diarization = request.form.get('enable_diarization') == 'on'
-
             # Create a temporary file to store the upload
             with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as temp_file:
                 file.save(temp_file.name)
@@ -308,7 +227,7 @@ def index():
             try:
                 # Transcribe the audio file (handles both small and large files)
                 print(f"Transcribing file: {filename}")
-                transcript = transcribe_audio_file(temp_file_path, filename, enable_diarization)
+                transcript = transcribe_audio_file(temp_file_path, filename)
                 print("Transcription successful")
 
                 flash('Transcription completed successfully!', 'success')

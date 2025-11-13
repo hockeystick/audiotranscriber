@@ -215,19 +215,17 @@
                     >
                 </div>
 
-                <div class="form-group">
-                    <label style="display: flex; align-items: center; cursor: pointer;">
-                        <input
-                            type="checkbox"
-                            id="enable_diarization"
-                            name="enable_diarization"
-                            style="margin-right: 10px; width: auto; cursor: pointer;"
-                        >
-                        <span>Enable Speaker Identification (identifies different speakers)</span>
-                    </label>
-                </div>
-
                 <button type="submit">Transcribe Audio</button>
+
+                <!-- Progress bar (hidden by default) -->
+                <div id="progress-container" style="display: none; margin-top: 20px;">
+                    <div style="background: #f0f0f0; border-radius: 10px; overflow: hidden; height: 30px;">
+                        <div id="progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); transition: width 0.3s; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px;">
+                            0%
+                        </div>
+                    </div>
+                    <p id="progress-text" style="margin-top: 10px; color: #666; text-align: center; font-size: 14px;">Processing...</p>
+                </div>
             </form>
 
             <div class="info-box">
@@ -250,5 +248,37 @@
         </div>
         {% endif %}
     </div>
+
+    <script>
+        // Show progress bar when form is submitted
+        document.querySelector('form').addEventListener('submit', function() {
+            const progressContainer = document.getElementById('progress-container');
+            const progressBar = document.getElementById('progress-bar');
+            const progressText = document.getElementById('progress-text');
+            const submitButton = document.querySelector('button[type="submit"]');
+
+            // Show progress container
+            progressContainer.style.display = 'block';
+
+            // Disable submit button
+            submitButton.disabled = true;
+            submitButton.style.opacity = '0.5';
+            submitButton.style.cursor = 'not-allowed';
+
+            // Simulate progress (since we can't get real-time progress from backend easily)
+            let progress = 0;
+            const interval = setInterval(function() {
+                progress += Math.random() * 5;
+                if (progress > 90) progress = 90; // Cap at 90% until complete
+
+                progressBar.style.width = progress + '%';
+                progressBar.textContent = Math.round(progress) + '%';
+                progressText.textContent = 'Transcribing audio... This may take a few minutes for long files.';
+            }, 1000);
+
+            // Store interval ID to clear it later if needed
+            window.progressInterval = interval;
+        });
+    </script>
 </body>
 </html>
