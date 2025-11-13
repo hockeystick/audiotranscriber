@@ -88,30 +88,81 @@ def split_audio_file(file_path, chunk_length_ms=CHUNK_LENGTH_MS):
     return chunk_files
 
 
-def transcribe_audio_file(file_path, filename):
+def format_diarized_transcript(segments):
+    """
+    Format diarized transcript segments into a readable format.
+
+    Args:
+        segments: List of segment objects with speaker, text, start, end
+
+    Returns:
+        Formatted transcript string with speaker labels
+    """
+    formatted_lines = []
+    current_speaker = None
+
+    for segment in segments:
+        speaker = segment.get('speaker', 'Unknown')
+        text = segment.get('text', '').strip()
+
+        if not text:
+            continue
+
+        # Group consecutive segments from the same speaker
+        if speaker != current_speaker:
+            formatted_lines.append(f"\n{speaker}: {text}")
+            current_speaker = speaker
+        else:
+            # Continue the current speaker's text
+            formatted_lines.append(f" {text}")
+
+    return "".join(formatted_lines).strip()
+
+
+def transcribe_audio_file(file_path, filename, enable_diarization=False):
     """
     Transcribe an audio file, automatically handling large files by chunking.
 
     Args:
         file_path: Path to the audio file
         filename: Original filename (for logging)
+        enable_diarization: If True, use speaker diarization
 
     Returns:
         The complete transcript as a string
     """
     file_size = os.path.getsize(file_path)
     print(f"File size: {file_size / (1024*1024):.2f}MB")
+    print(f"Diarization: {'enabled' if enable_diarization else 'disabled'}")
+
+    # Choose model based on diarization setting
+    model = "gpt-4o-transcribe-diarize" if enable_diarization else "gpt-4o-mini-transcribe"
 
     # If file is small enough, transcribe directly
     if file_size <= OPENAI_MAX_SIZE:
         print("File is within size limit, transcribing directly...")
         with open(file_path, 'rb') as audio_file:
-            response = client.audio.transcriptions.create(
-                model="gpt-4o-mini-transcribe",
-                file=audio_file,
-                response_format="text"
-            )
-        return response
+            if enable_diarization:
+                # Diarization requires specific parameters
+                response = client.audio.transcriptions.create(
+                    model=model,
+                    file=audio_file,
+                    response_format="diarized_json",
+                    chunking_strategy="auto"
+                )
+                # Format the diarized response
+                if hasattr(response, 'segments'):
+                    return format_diarized_transcript(response.segments)
+                else:
+                    # Fallback if segments not available
+                    return response.text if hasattr(response, 'text') else str(response)
+            else:
+                response = client.audio.transcriptions.create(
+                    model=model,
+                    file=audio_file,
+                    response_format="text"
+                )
+                return response
 
     # File is too large, need to split into chunks
     print("File exceeds size limit, splitting into chunks...")
@@ -127,15 +178,28 @@ def transcribe_audio_file(file_path, filename):
             print(f"Transcribing chunk {i+1}/{len(chunk_files)}...")
 
             with open(chunk_file, 'rb') as audio_file:
-                response = client.audio.transcriptions.create(
-                    model="gpt-4o-mini-transcribe",
-                    file=audio_file,
-                    response_format="text"
-                )
-                transcripts.append(response)
+                if enable_diarization:
+                    response = client.audio.transcriptions.create(
+                        model=model,
+                        file=audio_file,
+                        response_format="diarized_json",
+                        chunking_strategy="auto"
+                    )
+                    # Format the diarized response
+                    if hasattr(response, 'segments'):
+                        transcripts.append(format_diarized_transcript(response.segments))
+                    else:
+                        transcripts.append(response.text if hasattr(response, 'text') else str(response))
+                else:
+                    response = client.audio.transcriptions.create(
+                        model=model,
+                        file=audio_file,
+                        response_format="text"
+                    )
+                    transcripts.append(response)
 
         # Combine all transcripts
-        complete_transcript = " ".join(transcripts)
+        complete_transcript = "\n\n".join(transcripts)
         print("All chunks transcribed successfully")
 
         return complete_transcript
@@ -185,6 +249,9 @@ def index():
             # We need to save it because OpenAI API expects a file-like object with a name
             filename = secure_filename(file.filename)
 
+            # Check if diarization is enabled
+            enable_diarization = request.form.get('enable_diarization') == 'on'
+
             # Create a temporary file to store the upload
             with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as temp_file:
                 file.save(temp_file.name)
@@ -193,7 +260,7 @@ def index():
             try:
                 # Transcribe the audio file (handles both small and large files)
                 print(f"Transcribing file: {filename}")
-                transcript = transcribe_audio_file(temp_file_path, filename)
+                transcript = transcribe_audio_file(temp_file_path, filename, enable_diarization)
                 print("Transcription successful")
 
                 flash('Transcription completed successfully!', 'success')

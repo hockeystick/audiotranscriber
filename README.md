@@ -7,6 +7,7 @@ A minimal web application that transcribes MP3 audio files using OpenAI's latest
 - Upload MP3, WAV, or M4A audio files (up to 200MB)
 - **Large file support**: Automatically splits files larger than 25MB into chunks
 - **High-quality transcription** using OpenAI's GPT-4o Mini model
+- **Speaker diarization**: Optional speaker identification to distinguish different speakers in conversations
 - View transcript directly in the browser
 - Download transcript as a .txt file
 - Clean, responsive user interface
@@ -112,10 +113,32 @@ Open your browser and navigate to `http://localhost:8000` to use the app.
 ## Usage
 
 1. Click "Choose File" and select an MP3 audio file from your computer
-2. Click the "Transcribe Audio" button
-3. Wait for the transcription to complete (may take a few moments for long files)
-4. View the transcript in the text area
-5. Click "Download .txt" to save the transcript to your computer
+2. (Optional) Check "Enable Speaker Identification" if you want to identify different speakers
+3. Click the "Transcribe Audio" button
+4. Wait for the transcription to complete (may take a few moments for long files)
+5. View the transcript in the text area
+6. Click "Download .txt" to save the transcript to your computer
+
+### Speaker Diarization
+
+When you enable "Speaker Identification", the app will:
+- Use OpenAI's `gpt-4o-transcribe-diarize` model
+- Identify different speakers in the audio
+- Label each segment with the speaker (e.g., "Speaker 0", "Speaker 1", etc.)
+- Format the output for easy readability
+
+**Example output with diarization:**
+```
+Speaker 0: Hello, welcome to today's meeting.
+Speaker 1: Thanks for having me. I'm excited to discuss the project.
+Speaker 0: Great! Let's start with the overview.
+```
+
+**Note**: Speaker diarization works best with:
+- Clear audio quality
+- Distinct voices
+- Minimal background noise
+- Audio longer than 30 seconds
 
 ### How Large File Processing Works
 
