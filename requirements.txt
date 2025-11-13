@@ -2,8 +2,8 @@
 Flask==3.0.0
 
 # OpenAI Python SDK for API access
-# Using version 1.12.0 for better stability and compatibility
-openai==1.12.0
+# Using version 1.3.0 for stability (known to work without proxy issues)
+openai==1.3.0
 
 # Audio processing library for handling large files
 # Note: Requires ffmpeg to be installed on the system
