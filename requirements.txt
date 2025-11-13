@@ -5,6 +5,9 @@ Flask==3.0.0
 # Using version 1.3.0 for stability (known to work without proxy issues)
 openai==1.3.0
 
+# httpx version compatible with openai 1.3.0 (must be <0.24.0 to avoid proxy issues)
+httpx==0.23.3
+
 # Audio processing library for handling large files
 # Note: Requires ffmpeg to be installed on the system
 pydub==0.25.1
