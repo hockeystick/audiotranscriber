@@ -176,24 +176,52 @@ class GoogleCloudProvider(TranscriptionProvider):
             )
             transcripts.append(transcript)
 
-        # Combine transcripts
+        # Combine transcripts with clear chunk separators
         if enable_diarization:
-            return "\n\n---\n\n".join(transcripts)  # Clear separator for diarized chunks
+            # For diarized content, use a clear visual separator between chunks
+            separator = "\n\n" + "=" * 50 + "\n\n"
+            return separator.join(transcripts)
         else:
+            # For standard content, use paragraph breaks
             return "\n\n".join(transcripts)
 
     def _format_standard_results(self, results) -> str:
-        """Format standard (non-diarized) transcription results"""
+        """
+        Format standard (non-diarized) transcription results.
+        Creates properly formatted paragraphs for easy copy-pasting.
+        """
         transcript_parts = []
         for result in results:
             if result.alternatives:
-                transcript_parts.append(result.alternatives[0].transcript)
-        return " ".join(transcript_parts)
+                text = result.alternatives[0].transcript.strip()
+                if text:
+                    transcript_parts.append(text)
+
+        # Join parts with proper spacing
+        # If a part ends with sentence-ending punctuation, add paragraph break
+        formatted_text = []
+        for i, part in enumerate(transcript_parts):
+            formatted_text.append(part)
+
+            # Add paragraph break after sentence-ending punctuation
+            # or if this is not the last part
+            if i < len(transcript_parts) - 1:
+                if part.rstrip().endswith(('.', '!', '?')):
+                    formatted_text.append('\n\n')
+                else:
+                    formatted_text.append(' ')
+
+        return "".join(formatted_text)
 
     def _format_diarized_results(self, results) -> str:
-        """Format diarized transcription results with speaker labels"""
+        """
+        Format diarized transcription results with speaker labels.
+        Creates a copy-paste friendly format with clear speaker segments.
+        """
         formatted_lines = []
         current_speaker = None
+        current_speaker_text = []
+        current_speaker_start_time = None
 
         for result in results:
             if not result.alternatives:
@@ -207,14 +235,74 @@ class GoogleCloudProvider(TranscriptionProvider):
                     speaker = getattr(word_info, 'speaker_label', 'Unknown')
                     word = word_info.word
 
-                    # Start new speaker line if speaker changed
+                    # Get timestamp if available
+                    start_time = None
+                    if hasattr(word_info, 'start_offset'):
+                        start_time = word_info.start_offset
+
+                    # If speaker changed, flush current speaker's text
                     if speaker != current_speaker:
-                        formatted_lines.append(f"\n{speaker}: {word}")
+                        if current_speaker is not None and current_speaker_text:
+                            # Join the accumulated text and add to output
+                            text = ' '.join(current_speaker_text)
+
+                            # Add timestamp if available
+                            if current_speaker_start_time:
+                                timestamp = self._format_timestamp(current_speaker_start_time)
+                                formatted_lines.append(f"[{timestamp}] {current_speaker}: {text}\n\n")
+                            else:
+                                formatted_lines.append(f"{current_speaker}: {text}\n\n")
+
+                        # Start new speaker
                         current_speaker = speaker
+                        current_speaker_text = [word]
+                        current_speaker_start_time = start_time
                     else:
-                        formatted_lines.append(f" {word}")
+                        # Same speaker, accumulate words
+                        current_speaker_text.append(word)
             else:
                 # No word-level info, just add transcript
-                formatted_lines.append(alternative.transcript)
+                if current_speaker_text:
+                    # Flush any pending text first
+                    text = ' '.join(current_speaker_text)
+                    formatted_lines.append(f"{current_speaker}: {text}\n\n")
+                    current_speaker_text = []
+                formatted_lines.append(alternative.transcript + "\n\n")
+
+        # Don't forget the last speaker's text
+        if current_speaker is not None and current_speaker_text:
+            text = ' '.join(current_speaker_text)
+
+            # Add timestamp if available
+            if current_speaker_start_time:
+                timestamp = self._format_timestamp(current_speaker_start_time)
+                formatted_lines.append(f"[{timestamp}] {current_speaker}: {text}\n")
+            else:
+                formatted_lines.append(f"{current_speaker}: {text}\n")
 
         return "".join(formatted_lines).strip()
+
+    def _format_timestamp(self, time_offset) -> str:
+        """
+        Format a time offset into MM:SS format.
+
+        Args:
+            time_offset: Google's Duration object or similar
+
+        Returns:
+            Formatted timestamp string (e.g., "02:35")
+        """
+        try:
+            # Handle Duration object with seconds and nanos
+            if hasattr(time_offset, 'seconds'):
+                total_seconds = time_offset.seconds
+            elif hasattr(time_offset, 'total_seconds'):
+                total_seconds = int(time_offset.total_seconds())
+            else:
+                total_seconds = int(time_offset)
+
+            minutes = total_seconds // 60
+            seconds = total_seconds % 60
+            return f"{minutes:02d}:{seconds:02d}"
+        except (AttributeError, ValueError, TypeError):
+            return "00:00"

@@ -63,7 +63,8 @@ class OpenAIProvider(TranscriptionProvider):
                 response_format="text"
             )
 
-        return response
+        # Return cleaned transcript
+        return response.strip() if isinstance(response, str) else str(response).strip()
 
     def transcribe_chunked(
         self,
@@ -101,5 +102,7 @@ class OpenAIProvider(TranscriptionProvider):
                 )
                 transcripts.append(response)
 
-        # Combine transcripts with paragraph breaks
+        # Combine transcripts with proper formatting for copy-pasting
+        # Remove any empty transcripts
+        transcripts = [t.strip() for t in transcripts if t.strip()]
         return "\n\n".join(transcripts)
