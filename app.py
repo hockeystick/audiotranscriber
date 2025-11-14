@@ -2,18 +2,20 @@
 MP3 Audio Transcription Web App
 ================================
 A Flask application that allows users to upload MP3 files and transcribe them
-using the OpenAI Audio Transcription API.
+using multiple AI providers (OpenAI, Google Cloud).
 Supports large files by automatically splitting them into chunks.
 """
 
 import os
 from flask import Flask, render_template, request, send_file, flash, redirect, url_for
 from werkzeug.utils import secure_filename
-from openai import OpenAI
 import tempfile
 from io import BytesIO
 from pydub import AudioSegment
 import math
+
+# Import providers
+from providers import get_provider, get_available_providers
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -22,16 +24,7 @@ app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-producti
 # Configure upload settings
 ALLOWED_EXTENSIONS = {'mp3', 'mpeg', 'wav', 'm4a'}
 MAX_FILE_SIZE = 200 * 1024 * 1024  # 200MB limit for uploads
-OPENAI_MAX_SIZE = 24 * 1024 * 1024  # 24MB - OpenAI's API limit (stay under 25MB)
 CHUNK_LENGTH_MS = 10 * 60 * 1000  # 10 minutes per chunk in milliseconds
-
-# Initialize OpenAI client
-# API key is read from environment variable OPENAI_API_KEY
-api_key = os.environ.get('OPENAI_API_KEY')
-if api_key:
-    client = OpenAI(api_key=api_key)
-else:
-    client = None
 
 
 def allowed_file(filename):
@@ -88,91 +81,64 @@ def split_audio_file(file_path, chunk_length_ms=CHUNK_LENGTH_MS):
     return chunk_files
 
 
-def format_diarized_transcript(segments):
+def transcribe_audio_file(file_path, filename, provider_name='openai', language='auto', enable_diarization=False):
     """
-    Format diarized transcript segments into a readable format.
-
-    Args:
-        segments: List of segment objects with speaker, text, start, end
-
-    Returns:
-        Formatted transcript string with speaker labels
-    """
-    formatted_lines = []
-    current_speaker = None
-
-    for segment in segments:
-        speaker = segment.get('speaker', 'Unknown')
-        text = segment.get('text', '').strip()
-
-        if not text:
-            continue
-
-        # Group consecutive segments from the same speaker
-        if speaker != current_speaker:
-            formatted_lines.append(f"\n{speaker}: {text}")
-            current_speaker = speaker
-        else:
-            # Continue the current speaker's text
-            formatted_lines.append(f" {text}")
-
-    return "".join(formatted_lines).strip()
-
-
-def transcribe_audio_file(file_path, filename):
-    """
-    Transcribe an audio file, automatically handling large files by chunking.
+    Transcribe an audio file using the specified provider.
+    Automatically handles large files by chunking.
 
     Args:
         file_path: Path to the audio file
         filename: Original filename (for logging)
+        provider_name: Name of the provider to use ('openai' or 'google')
+        language: Language code ('auto', 'en-US', etc.)
+        enable_diarization: Enable speaker identification
 
     Returns:
         The complete transcript as a string
     """
     file_size = os.path.getsize(file_path)
     print(f"File size: {file_size / (1024*1024):.2f}MB")
+    print(f"Provider: {provider_name}, Language: {language}, Diarization: {enable_diarization}")
 
-    # Use GPT-4o Mini for high-quality, reliable transcription
-    model = "gpt-4o-mini-transcribe"
+    # Get the provider instance
+    try:
+        provider = get_provider(provider_name)
+    except ValueError as e:
+        raise ValueError(f"Invalid provider: {e}")
 
-    # If file is small enough, transcribe directly
-    if file_size <= OPENAI_MAX_SIZE:
-        print("File is within size limit, transcribing directly...")
-        with open(file_path, 'rb') as audio_file:
-            response = client.audio.transcriptions.create(
-                model=model,
-                file=audio_file,
-                response_format="text"
-            )
-            return response
+    # Check if provider is configured
+    if not provider.is_configured():
+        raise ValueError(
+            f"{provider.name} is not configured. "
+            f"Please set the required environment variables/credentials."
+        )
+
+    # Check if file is within provider's size limit
+    if file_size <= provider.max_file_size:
+        print(f"File is within {provider.name} size limit, transcribing directly...")
+        return provider.transcribe(
+            file_path=file_path,
+            language=language,
+            enable_diarization=enable_diarization
+        )
 
     # File is too large, need to split into chunks
-    print("File exceeds size limit, splitting into chunks...")
+    print(f"File exceeds {provider.name} size limit, splitting into chunks...")
     chunk_files = []
 
     try:
         # Split the audio file into chunks
         chunk_files = split_audio_file(file_path)
 
-        # Transcribe each chunk
-        transcripts = []
-        for i, chunk_file in enumerate(chunk_files):
-            print(f"Transcribing chunk {i+1}/{len(chunk_files)}...")
+        # Transcribe using provider's chunked method
+        transcript = provider.transcribe_chunked(
+            chunk_files=chunk_files,
+            language=language,
+            enable_diarization=enable_diarization
+        )
 
-            with open(chunk_file, 'rb') as audio_file:
-                response = client.audio.transcriptions.create(
-                    model=model,
-                    file=audio_file,
-                    response_format="text"
-                )
-                transcripts.append(response)
-
-        # Combine all transcripts
-        complete_transcript = "\n\n".join(transcripts)
-        print("All chunks transcribed successfully")
-
-        return complete_transcript
+        print(f"All chunks transcribed successfully with {provider.name}")
+        return transcript
 
     finally:
         # Clean up chunk files
@@ -186,37 +152,37 @@ def index():
     """
     Main route that handles both displaying the form and processing transcription.
 
-    GET: Display the upload form
+    GET: Display the upload form with available providers
     POST: Process the uploaded MP3 file and return the transcript
     """
     transcript = None
+    providers_info = get_available_providers()
 
     if request.method == 'POST':
-        # Check if API key is configured
-        if not os.environ.get('OPENAI_API_KEY'):
-            flash('Error: OPENAI_API_KEY environment variable is not set.', 'error')
-            return render_template('index.html', transcript=None)
+        # Get form parameters
+        provider_name = request.form.get('provider', 'openai')
+        language = request.form.get('language', 'auto')
+        enable_diarization = request.form.get('enable_diarization') == 'on'
 
         # Validate that a file was uploaded
         if 'audio_file' not in request.files:
             flash('No file selected. Please choose an MP3 file to upload.', 'error')
-            return render_template('index.html', transcript=None)
+            return render_template('index.html', transcript=None, providers=providers_info)
 
         file = request.files['audio_file']
 
         # Check if user actually selected a file
         if file.filename == '':
             flash('No file selected. Please choose an MP3 file to upload.', 'error')
-            return render_template('index.html', transcript=None)
+            return render_template('index.html', transcript=None, providers=providers_info)
 
         # Validate file type
         if not allowed_file(file.filename):
             flash('Invalid file type. Please upload an MP3, WAV, or M4A file.', 'error')
-            return render_template('index.html', transcript=None)
+            return render_template('index.html', transcript=None, providers=providers_info)
 
         try:
             # Save uploaded file to a temporary location
-            # We need to save it because OpenAI API expects a file-like object with a name
             filename = secure_filename(file.filename)
 
             # Create a temporary file to store the upload
@@ -227,7 +193,13 @@ def index():
             try:
                 # Transcribe the audio file (handles both small and large files)
                 print(f"Transcribing file: {filename}")
-                transcript = transcribe_audio_file(temp_file_path, filename)
+                transcript = transcribe_audio_file(
+                    temp_file_path,
+                    filename,
+                    provider_name=provider_name,
+                    language=language,
+                    enable_diarization=enable_diarization
+                )
                 print("Transcription successful")
 
                 flash('Transcription completed successfully!', 'success')
@@ -240,10 +212,10 @@ def index():
         except Exception as e:
             # Log the error and show a user-friendly message
             print(f"Transcription error: {str(e)}")
-            flash('An error occurred during transcription. Please try again.', 'error')
-            return render_template('index.html', transcript=None)
+            flash(f'An error occurred during transcription: {str(e)}', 'error')
+            return render_template('index.html', transcript=None, providers=providers_info)
 
-    return render_template('index.html', transcript=transcript)
+    return render_template('index.html', transcript=transcript, providers=providers_info)
 
 
 @app.route('/download')
@@ -272,12 +244,25 @@ def download():
 
 
 if __name__ == '__main__':
-    # Check if OpenAI API key is set
-    if not os.environ.get('OPENAI_API_KEY'):
-        print("\n" + "="*60)
-        print("WARNING: OPENAI_API_KEY environment variable is not set!")
-        print("Please set it before using the application.")
-        print("="*60 + "\n")
+    # Check which providers are configured
+    providers_info = get_available_providers()
+    configured_providers = [name for name, info in providers_info.items() if info['configured']]
+
+    print("\n" + "="*60)
+    print("MP3 Audio Transcriber - Multi-Provider Edition")
+    print("="*60)
+
+    if configured_providers:
+        print(f"✅ Configured providers: {', '.join(configured_providers)}")
+    else:
+        print("⚠️  WARNING: No providers are configured!")
+        print("\nTo use OpenAI:")
+        print("  export OPENAI_API_KEY='your-key-here'")
+        print("\nTo use Google Cloud:")
+        print("  export GOOGLE_CLOUD_PROJECT='your-project-id'")
+        print("  gcloud auth application-default login")
+
+    print("="*60 + "\n")
 
     # Run the Flask development server
     # In production, use a proper WSGI server like gunicorn

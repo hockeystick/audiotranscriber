@@ -1,12 +1,14 @@
 # MP3 Audio Transcriber
 
-A minimal web application that transcribes MP3 audio files using OpenAI's latest GPT-4o Mini transcription model for high-quality results.
+A minimal web application that transcribes MP3 audio files using multiple AI providers (OpenAI and Google Cloud) for high-quality results with speaker diarization support.
 
 ## Features
 
 - 🎵 Upload MP3, WAV, or M4A audio files (up to 200MB)
-- 🚀 **Large file support**: Automatically splits files larger than 25MB into chunks
-- ✨ **High-quality transcription** using OpenAI's GPT-4o Mini model
+- 🚀 **Large file support**: Automatically splits files larger than provider limits into chunks
+- ✨ **Multi-provider support**: Choose between OpenAI or Google Cloud Speech-to-Text
+- 🎙️ **Speaker diarization**: Identify and label different speakers in conversations (Google Cloud)
+- 🌍 **Multi-language support**: Auto-detect or select from 14+ languages
 - 📊 **Real-time progress bar**: Visual feedback during transcription
 - 💻 **Native Mac Application**: Double-click launcher for easy access
 - 📝 View transcript directly in the browser
@@ -17,18 +19,39 @@ A minimal web application that transcribes MP3 audio files using OpenAI's latest
 ## Tech Stack
 
 - **Backend**: Flask (Python)
-- **AI**: OpenAI GPT-4o Mini Transcription Model (`gpt-4o-mini-transcribe`)
+- **AI Providers**:
+  - OpenAI GPT-4o Mini Transcription Model (`gpt-4o-mini-transcribe`)
+  - Google Cloud Speech-to-Text V2 API (Chirp 3 model)
 - **Frontend**: Server-rendered HTML with embedded CSS
 - **Deployment**: Gunicorn WSGI server (production-ready)
+
+## Provider Comparison
+
+| Feature | OpenAI | Google Cloud (Chirp 3) |
+|---------|--------|------------------------|
+| **Max File Size** | 24MB (auto-chunks larger files) | 200MB (auto-chunks larger files) |
+| **Diarization** | Not currently available in SDK | ✅ Full speaker diarization support |
+| **Languages** | 50+ languages | 100+ languages |
+| **Pricing** | $0.006/minute | Pay-as-you-go (varies by region) |
+| **Setup** | API key only | Project ID + Authentication |
+| **Best For** | Quick transcription, cost-effective | Speaker identification, enterprise use |
 
 ## Prerequisites
 
 - Python 3.8 or higher
-- An OpenAI API key ([Get one here](https://platform.openai.com/api-keys))
 - FFmpeg (required for processing audio files)
   - **macOS**: `brew install ffmpeg`
   - **Ubuntu/Debian**: `sudo apt-get install ffmpeg`
   - **Windows**: Download from [ffmpeg.org](https://ffmpeg.org/download.html) or use `choco install ffmpeg`
+
+### Provider Requirements
+
+**For OpenAI:**
+- An OpenAI API key ([Get one here](https://platform.openai.com/api-keys))
+
+**For Google Cloud (optional, for diarization support):**
+- A Google Cloud project with Speech-to-Text API enabled
+- Google Cloud authentication configured (see setup below)
 
 ## Local Setup
 
@@ -82,6 +105,7 @@ pip install -r requirements.txt
 
 Create a `.env` file in the project root or export the variables directly:
 
+**For OpenAI (Basic Setup):**
 ```bash
 # Option 1: Create a .env file
 echo "OPENAI_API_KEY=your-api-key-here" > .env
@@ -93,10 +117,55 @@ export OPENAI_API_KEY="your-api-key-here"
 set OPENAI_API_KEY=your-api-key-here
 ```
 
-**Required Environment Variables:**
+**For Google Cloud (Optional, for Diarization):**
 
-- `OPENAI_API_KEY`: Your OpenAI API key (required)
-- `SECRET_KEY`: Flask secret key (optional, defaults to a dev key)
+1. **Create a Google Cloud Project:**
+   ```bash
+   # Install gcloud CLI if not already installed
+   # Visit: https://cloud.google.com/sdk/docs/install
+
+   # Create a new project (or use existing)
+   gcloud projects create your-project-id
+   gcloud config set project your-project-id
+   ```
+
+2. **Enable Speech-to-Text API:**
+   ```bash
+   gcloud services enable speech.googleapis.com
+   ```
+
+3. **Set up authentication:**
+   ```bash
+   # Authenticate with your Google account
+   gcloud auth application-default login
+
+   # Or create a service account and download credentials
+   gcloud iam service-accounts create transcriber-sa
+   gcloud projects add-iam-policy-binding your-project-id \
+     --member="serviceAccount:transcriber-sa@your-project-id.iam.gserviceaccount.com" \
+     --role="roles/speech.client"
+   gcloud iam service-accounts keys create credentials.json \
+     --iam-account=transcriber-sa@your-project-id.iam.gserviceaccount.com
+
+   # Set the credentials path
+   export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/credentials.json"
+   ```
+
+4. **Set environment variables:**
+   ```bash
+   export GOOGLE_CLOUD_PROJECT="your-project-id"
+   export GOOGLE_CLOUD_REGION="us"  # Optional, defaults to 'us'
+   ```
+
+**Environment Variables Summary:**
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `OPENAI_API_KEY` | For OpenAI | Your OpenAI API key |
+| `GOOGLE_CLOUD_PROJECT` | For Google Cloud | Your Google Cloud project ID |
+| `GOOGLE_APPLICATION_CREDENTIALS` | For Google Cloud | Path to service account JSON (if using service account) |
+| `GOOGLE_CLOUD_REGION` | Optional | Google Cloud region (default: 'us') |
+| `SECRET_KEY` | Optional | Flask secret key (defaults to dev key) |
 
 ### 6. Run the Application
 
@@ -131,37 +200,76 @@ chmod +x start_app.sh
 
 ### Using the Web Interface
 
-1. Click "Choose File" and select an MP3 audio file from your computer
-2. Click the "Transcribe Audio" button
-3. Watch the progress bar as your file is transcribed
-4. View the transcript in the text area
-5. Click "Download .txt" to save the transcript to your computer
+1. **Select a Provider:** Choose between OpenAI or Google Cloud from the dropdown
+   - OpenAI: Fast, cost-effective, no diarization
+   - Google Cloud: Speaker diarization support, larger file support
+
+2. **Select Language:** Choose "Auto-detect" or a specific language (English, Spanish, etc.)
+
+3. **Enable Diarization (Optional):** Check the box to identify different speakers
+   - Only available with Google Cloud provider
+   - Automatically disabled when OpenAI is selected
+
+4. **Upload File:** Click "Choose File" and select an MP3 audio file from your computer
+
+5. **Transcribe:** Click the "Transcribe Audio" button and watch the progress bar
+
+6. **View Results:** The transcript appears below, with speaker labels if diarization was enabled
+
+7. **Download:** Click "Download .txt" to save the transcript to your computer
 
 ### How Large File Processing Works
 
-OpenAI's Whisper API has a 25MB file size limit. This app automatically handles larger files:
+Each provider has different file size limits. The app automatically handles files that exceed provider limits:
 
-1. **Files ≤ 24MB**: Transcribed directly in a single API call
-2. **Files > 24MB**: Automatically split into 10-minute chunks, transcribed separately, then combined
+**OpenAI:**
+- File size limit: 24MB
+- Files > 24MB: Automatically split into 10-minute chunks, transcribed separately, then combined
+
+**Google Cloud:**
+- File size limit: 200MB
+- Files > 200MB: Automatically split into 10-minute chunks, transcribed separately, then combined
 
 **Example**: A 58MB file (≈40 minutes) will be:
-- Split into 4 chunks of ~10 minutes each
-- Each chunk transcribed via OpenAI API
-- Transcripts combined into a single result
+- **With OpenAI**: Split into 4 chunks of ~10 minutes each, transcribed separately, then combined
+- **With Google Cloud**: Transcribed directly in a single API call (no splitting needed)
 
 This process is completely automatic and transparent to the user. Progress is logged to the server console.
+
+### Speaker Diarization
+
+When using Google Cloud with diarization enabled, the transcript will include speaker labels:
+
+```
+Speaker 1: Hello, how are you today?
+Speaker 2: I'm doing great, thanks for asking.
+Speaker 1: That's wonderful to hear.
+```
+
+Diarization is particularly useful for:
+- Interview transcription
+- Meeting recordings
+- Podcast transcription
+- Multi-speaker conversations
 
 ## Project Structure
 
 ```
 audiotranscriber/
-├── app.py                  # Main Flask application
+├── app.py                      # Main Flask application
+├── providers/                  # Transcription provider implementations
+│   ├── __init__.py            # Provider factory and registry
+│   ├── base.py                # Abstract base provider class
+│   ├── openai_provider.py     # OpenAI implementation
+│   └── google_provider.py     # Google Cloud implementation
 ├── templates/
-│   └── index.html         # HTML template with embedded CSS
-├── requirements.txt       # Python dependencies
-├── README.md             # This file
-├── .gitignore           # Git ignore file
-└── .env.example         # Example environment variables
+│   └── index.html             # HTML template with embedded CSS
+├── requirements.txt           # Python dependencies
+├── README.md                  # This file
+├── .gitignore                # Git ignore file
+├── start_app.sh              # Launcher script
+├── create_mac_app.sh         # Mac app creator
+└── .env.example              # Example environment variables
 ```
 
 ## Deployment
@@ -173,17 +281,22 @@ audiotranscriber/
 3. Configure the service:
    - **Build Command**: `apt-get update && apt-get install -y ffmpeg && pip install -r requirements.txt`
    - **Start Command**: `gunicorn app:app`
-   - **Environment Variables**: Add `OPENAI_API_KEY`
+   - **Environment Variables**:
+     - Add `OPENAI_API_KEY` (required for OpenAI)
+     - Add `GOOGLE_CLOUD_PROJECT` (optional, for Google Cloud)
+     - Add `GOOGLE_APPLICATION_CREDENTIALS` as a secret file if using Google Cloud service account
 4. Deploy!
 
-**Note**: Render's native environment includes ffmpeg, but if you encounter issues, you can use the build command above to ensure it's installed.
+**Note**: For Google Cloud on Render, you may need to add the service account JSON as a secret file and set the path in environment variables.
 
 ### Deploy to Railway
 
 1. Create a new project on [Railway](https://railway.app)
 2. Connect your Git repository
 3. Railway will auto-detect the Python app
-4. Add environment variable `OPENAI_API_KEY` in the settings
+4. Add environment variables in the settings:
+   - `OPENAI_API_KEY` (required for OpenAI)
+   - `GOOGLE_CLOUD_PROJECT` (optional, for Google Cloud)
 5. Add a build command if needed: `apt-get update && apt-get install -y ffmpeg && pip install -r requirements.txt`
 6. Deploy!
 
@@ -200,6 +313,8 @@ heroku create your-app-name
 heroku buildpacks:add --index 1 https://github.com/jonathanong/heroku-buildpack-ffmpeg-latest.git
 heroku buildpacks:add --index 2 heroku/python
 heroku config:set OPENAI_API_KEY=your-api-key-here
+# Optional: Add Google Cloud credentials
+heroku config:set GOOGLE_CLOUD_PROJECT=your-project-id
 git push heroku main
 ```
 
@@ -212,19 +327,23 @@ Most Platform-as-a-Service providers support Python apps. You'll need:
 - **System Dependencies**: Ensure ffmpeg is installed (most modern PaaS providers include it)
 - **Build Command**: `pip install -r requirements.txt` (or `apt-get install -y ffmpeg && pip install -r requirements.txt` if ffmpeg is not available)
 - **Start Command**: `gunicorn app:app --bind 0.0.0.0:$PORT`
-- **Environment Variables**: Set `OPENAI_API_KEY`
+- **Environment Variables**:
+  - Set `OPENAI_API_KEY` (required for OpenAI)
+  - Set `GOOGLE_CLOUD_PROJECT` (optional, for Google Cloud)
+  - Set `GOOGLE_APPLICATION_CREDENTIALS` path if using service account
 
 ## Configuration
 
 ### File Size Limits
 
-The app supports files up to 200MB by default. Files larger than 24MB are automatically split into chunks for processing.
+The app supports files up to 200MB by default. Provider-specific limits:
 
+- **OpenAI**: 24MB limit - files larger than this are automatically chunked
+- **Google Cloud**: 200MB limit - files larger than this are automatically chunked
 - `MAX_FILE_SIZE`: Maximum upload size (default: 200MB)
-- `OPENAI_MAX_SIZE`: OpenAI's API limit (24MB) - files larger than this are automatically chunked
 - `CHUNK_LENGTH_MS`: Length of each audio chunk (default: 10 minutes)
 
-To modify these limits, edit the constants at the top of `app.py`.
+To modify these limits, edit the constants in the provider files under `providers/`.
 
 ### Supported Audio Formats
 
@@ -236,9 +355,14 @@ By default, the app accepts:
 
 To add more formats, update the `ALLOWED_EXTENSIONS` set in `app.py`.
 
-### Transcription Model
+### Transcription Models
 
-The app uses OpenAI's `whisper-1` model by default. This is cost-effective and accurate. To use a different model (if available), modify the `model` parameter in the `client.audio.transcriptions.create()` call in `app.py`.
+The app supports multiple transcription models:
+
+- **OpenAI**: Uses `gpt-4o-mini-transcribe` model for high-quality, cost-effective transcription
+- **Google Cloud**: Uses Chirp 3 model for advanced features like speaker diarization
+
+To modify models, edit the respective provider files in `providers/openai_provider.py` or `providers/google_provider.py`.
 
 ## Error Handling
 
@@ -258,28 +382,46 @@ The app handles common errors gracefully:
 
 ## Cost Considerations
 
-OpenAI charges for transcription based on audio length:
+### OpenAI Pricing
 - Whisper API: $0.006 per minute of audio
+- **Examples**:
+  - 30-minute MP3: ~$0.18
+  - 60-minute MP3: ~$0.36
+  - 120-minute MP3: ~$0.72
 
-**Examples**:
-- 30-minute MP3: ~$0.18
-- 60-minute MP3: ~$0.36
-- 120-minute MP3: ~$0.72
+### Google Cloud Pricing
+- Speech-to-Text V2 (Chirp 3): Varies by region and features
+- Standard audio: ~$0.024 per minute for first 60 minutes per month (free tier available)
+- Diarization adds additional cost
+- Check [Google Cloud Pricing](https://cloud.google.com/speech-to-text/pricing) for current rates
 
 **Note**: Large files are automatically split into chunks and transcribed separately. The cost is based on the total audio duration, regardless of whether it's processed as one file or multiple chunks.
 
 ## Troubleshooting
 
-### "OPENAI_API_KEY environment variable is not set"
+### Provider Configuration Issues
 
-Make sure you've set the environment variable before running the app. See step 4 in Local Setup.
+**"No providers are configured!"**
+- Make sure you've set at least one provider's environment variables
+- For OpenAI: Set `OPENAI_API_KEY`
+- For Google Cloud: Set `GOOGLE_CLOUD_PROJECT` and authenticate with `gcloud auth application-default login`
 
-### "An error occurred during transcription"
+**"Provider is not configured"**
+- OpenAI: Check that `OPENAI_API_KEY` is set and valid
+- Google Cloud: Verify `GOOGLE_CLOUD_PROJECT` is set and you've authenticated properly
 
-- Check your OpenAI API key is valid
-- Ensure your audio file is under 25MB
-- Verify you have sufficient API credits in your OpenAI account
+### Transcription Errors
+
+**"An error occurred during transcription"**
+- Check your provider credentials are valid
+- Ensure you have sufficient API credits/quota
+- Verify your audio file is in a supported format
 - Check the server console for detailed error messages
+
+**Diarization not available**
+- Only Google Cloud supports diarization
+- Ensure you've selected Google Cloud as the provider
+- The diarization checkbox will be automatically disabled if the provider doesn't support it
 
 ### Port already in use
 
