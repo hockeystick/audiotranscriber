@@ -15,6 +15,8 @@ class TranscriptionProvider(ABC):
         self.name = "Base Provider"
         self.supports_diarization = False
         self.max_file_size = 25 * 1024 * 1024  # 25MB default
+        self.available_models = []  # List of available models
+        self.default_model = None  # Default model to use
 
     @abstractmethod
     def transcribe(
@@ -22,6 +24,7 @@ class TranscriptionProvider(ABC):
         file_path: str,
         language: Optional[str] = None,
         enable_diarization: bool = False,
+        model: Optional[str] = None,
         **kwargs
     ) -> str:
         """
@@ -31,6 +34,7 @@ class TranscriptionProvider(ABC):
             file_path: Path to the audio file
             language: Language code (e.g., 'en-US', 'auto')
             enable_diarization: Enable speaker identification
+            model: Model to use (if None, uses default_model)
             **kwargs: Provider-specific options
 
         Returns:
@@ -44,6 +48,7 @@ class TranscriptionProvider(ABC):
         chunk_files: List[str],
         language: Optional[str] = None,
         enable_diarization: bool = False,
+        model: Optional[str] = None,
         **kwargs
     ) -> str:
         """
@@ -53,6 +58,7 @@ class TranscriptionProvider(ABC):
             chunk_files: List of paths to audio chunk files
             language: Language code
             enable_diarization: Enable speaker identification
+            model: Model to use (if None, uses default_model)
             **kwargs: Provider-specific options
 
         Returns:
@@ -70,6 +76,15 @@ class TranscriptionProvider(ABC):
         """
         pass
 
+    def get_available_models(self) -> List[Dict[str, str]]:
+        """
+        Get list of available models for this provider.
+
+        Returns:
+            List of model dictionaries with 'id', 'name', and 'description' keys
+        """
+        return self.available_models
+
     def get_info(self) -> Dict[str, any]:
         """
         Get provider information.
@@ -81,5 +96,7 @@ class TranscriptionProvider(ABC):
             "name": self.name,
             "supports_diarization": self.supports_diarization,
             "max_file_size": self.max_file_size,
-            "configured": self.is_configured()
+            "configured": self.is_configured(),
+            "available_models": self.get_available_models(),
+            "default_model": self.default_model
         }

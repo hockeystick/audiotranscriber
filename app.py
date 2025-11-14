@@ -81,7 +81,7 @@ def split_audio_file(file_path, chunk_length_ms=CHUNK_LENGTH_MS):
     return chunk_files
 
 
-def transcribe_audio_file(file_path, filename, provider_name='openai', language='auto', enable_diarization=False):
+def transcribe_audio_file(file_path, filename, provider_name='openai', language='auto', enable_diarization=False, model=None):
     """
     Transcribe an audio file using the specified provider.
     Automatically handles large files by chunking.
@@ -92,13 +92,14 @@ def transcribe_audio_file(file_path, filename, provider_name='openai', language=
         provider_name: Name of the provider to use ('openai' or 'google')
         language: Language code ('auto', 'en-US', etc.)
         enable_diarization: Enable speaker identification
+        model: Model to use (if None, uses provider's default)
 
     Returns:
         The complete transcript as a string
     """
     file_size = os.path.getsize(file_path)
     print(f"File size: {file_size / (1024*1024):.2f}MB")
-    print(f"Provider: {provider_name}, Language: {language}, Diarization: {enable_diarization}")
+    print(f"Provider: {provider_name}, Model: {model or 'default'}, Language: {language}, Diarization: {enable_diarization}")
 
     # Get the provider instance
     try:
@@ -119,7 +120,8 @@ def transcribe_audio_file(file_path, filename, provider_name='openai', language=
         return provider.transcribe(
             file_path=file_path,
             language=language,
-            enable_diarization=enable_diarization
+            enable_diarization=enable_diarization,
+            model=model
         )
 
     # File is too large, need to split into chunks
@@ -134,7 +136,8 @@ def transcribe_audio_file(file_path, filename, provider_name='openai', language=
         transcript = provider.transcribe_chunked(
             chunk_files=chunk_files,
             language=language,
-            enable_diarization=enable_diarization
+            enable_diarization=enable_diarization,
+            model=model
         )
 
         print(f"All chunks transcribed successfully with {provider.name}")
@@ -163,6 +166,7 @@ def index():
         provider_name = request.form.get('provider', 'openai')
         language = request.form.get('language', 'auto')
         enable_diarization = request.form.get('enable_diarization') == 'on'
+        model = request.form.get('model', None)  # Get selected model
 
         # Validate that a file was uploaded
         if 'audio_file' not in request.files:
@@ -198,7 +202,8 @@ def index():
                     filename,
                     provider_name=provider_name,
                     language=language,
-                    enable_diarization=enable_diarization
+                    enable_diarization=enable_diarization,
+                    model=model
                 )
                 print("Transcription successful")
 

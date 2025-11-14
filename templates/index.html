@@ -235,6 +235,14 @@
                 </div>
 
                 <div class="form-group">
+                    <label for="model">Model:</label>
+                    <select id="model" name="model" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; background: white; font-size: 14px;">
+                        <option value="">Use default model</option>
+                    </select>
+                    <p id="model-description" style="font-size: 12px; color: #666; margin-top: 5px; min-height: 18px;"></p>
+                </div>
+
+                <div class="form-group">
                     <label for="language">Language:</label>
                     <select id="language" name="language" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; background: white; font-size: 14px;">
                         <option value="auto">Auto-detect</option>
@@ -315,10 +323,71 @@
             {% for name, info in providers.items() %}
             '{{ name }}': {
                 supportsDiarization: {{ 'true' if info.supports_diarization else 'false' }},
-                configured: {{ 'true' if info.configured else 'false' }}
-            },
+                configured: {{ 'true' if info.configured else 'false' }},
+                defaultModel: {{ ('\"' + info.default_model + '\"') if info.default_model else 'null' }},
+                availableModels: {{ info.available_models | tojson }}
+            }{% if not loop.last %},{% endif %}
             {% endfor %}
         };
+
+        // Update model dropdown based on selected provider
+        function updateModelOptions() {
+            const providerSelect = document.getElementById('provider');
+            const modelSelect = document.getElementById('model');
+            const selectedProvider = providerSelect.value;
+
+            const capabilities = providerCapabilities[selectedProvider];
+
+            // Clear existing options
+            modelSelect.innerHTML = '<option value="">Use default model</option>';
+
+            if (capabilities && capabilities.availableModels && capabilities.availableModels.length > 0) {
+                capabilities.availableModels.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model.id;
+                    option.textContent = model.name;
+                    option.dataset.description = model.description;
+
+                    // Mark default model
+                    if (model.id === capabilities.defaultModel) {
+                        option.textContent += ' (Default)';
+                    }
+
+                    modelSelect.appendChild(option);
+                });
+            }
+
+            // Update model description
+            updateModelDescription();
+        }
+
+        // Update model description text
+        function updateModelDescription() {
+            const modelSelect = document.getElementById('model');
+            const descriptionElement = document.getElementById('model-description');
+            const selectedOption = modelSelect.options[modelSelect.selectedIndex];
+
+            if (selectedOption && selectedOption.dataset.description) {
+                descriptionElement.textContent = selectedOption.dataset.description;
+            } else if (selectedOption && selectedOption.value === '') {
+                const providerSelect = document.getElementById('provider');
+                const selectedProvider = providerSelect.value;
+                const capabilities = providerCapabilities[selectedProvider];
+
+                if (capabilities && capabilities.defaultModel) {
+                    const defaultModel = capabilities.availableModels.find(m => m.id === capabilities.defaultModel);
+                    if (defaultModel) {
+                        descriptionElement.textContent = `Default: ${defaultModel.name} - ${defaultModel.description}`;
+                    } else {
+                        descriptionElement.textContent = '';
+                    }
+                } else {
+                    descriptionElement.textContent = '';
+                }
+            } else {
+                descriptionElement.textContent = '';
+            }
+        }
 
         // Update diarization checkbox based on selected provider
         function updateDiarizationAvailability() {
@@ -341,9 +410,16 @@
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
             updateDiarizationAvailability();
+            updateModelOptions();
 
             // Update when provider changes
-            document.getElementById('provider').addEventListener('change', updateDiarizationAvailability);
+            document.getElementById('provider').addEventListener('change', function() {
+                updateDiarizationAvailability();
+                updateModelOptions();
+            });
+
+            // Update description when model changes
+            document.getElementById('model').addEventListener('change', updateModelDescription);
         });
 
         // Show progress bar when form is submitted

@@ -18,13 +18,58 @@ except ImportError:
 
 
 class GoogleCloudProvider(TranscriptionProvider):
-    """Google Cloud Speech-to-Text (Chirp 3) provider"""
+    """Google Cloud Speech-to-Text provider with multiple model support"""
 
     def __init__(self):
         super().__init__()
-        self.name = "Google Cloud (Chirp 3)"
-        self.supports_diarization = True  # Chirp 3 has excellent diarization
+        self.name = "Google Cloud Speech-to-Text"
+        self.supports_diarization = True  # All Chirp models support diarization
         self.max_file_size = 200 * 1024 * 1024  # 200MB via BatchRecognize
+
+        # Define available models
+        self.available_models = [
+            {
+                "id": "chirp",
+                "name": "Chirp (Latest)",
+                "description": "Latest Chirp model with best accuracy and features"
+            },
+            {
+                "id": "chirp_2",
+                "name": "Chirp 2",
+                "description": "Second generation Chirp model"
+            },
+            {
+                "id": "chirp_3",
+                "name": "Chirp 3",
+                "description": "Third generation Chirp model (stable)"
+            },
+            {
+                "id": "long",
+                "name": "Long",
+                "description": "Optimized for long-form content (podcasts, meetings)"
+            },
+            {
+                "id": "short",
+                "name": "Short",
+                "description": "Optimized for short utterances and commands"
+            },
+            {
+                "id": "telephony",
+                "name": "Telephony",
+                "description": "Optimized for telephony audio (8kHz)"
+            },
+            {
+                "id": "medical_conversation",
+                "name": "Medical Conversation",
+                "description": "Specialized for medical conversations and terminology"
+            },
+            {
+                "id": "medical_dictation",
+                "name": "Medical Dictation",
+                "description": "Specialized for medical dictation and clinical notes"
+            }
+        ]
+        self.default_model = "chirp"  # Use latest Chirp as default
 
         # Configuration
         self.project_id = os.environ.get('GOOGLE_CLOUD_PROJECT')
@@ -78,15 +123,17 @@ class GoogleCloudProvider(TranscriptionProvider):
         file_path: str,
         language: Optional[str] = None,
         enable_diarization: bool = False,
+        model: Optional[str] = None,
         **kwargs
     ) -> str:
         """
-        Transcribe a single audio file using Google Cloud Chirp 3.
+        Transcribe a single audio file using Google Cloud Speech-to-Text.
 
         Args:
             file_path: Path to audio file
             language: BCP-47 language code (e.g., 'en-US', 'auto' for auto-detection)
             enable_diarization: Enable speaker diarization
+            model: Model to use (e.g., 'chirp', 'chirp_2', 'long', etc.)
             **kwargs: Additional options
 
         Returns:
@@ -98,7 +145,15 @@ class GoogleCloudProvider(TranscriptionProvider):
         if not self.client:
             raise ValueError("Google Cloud client not initialized")
 
-        print(f"[Google Cloud] Transcribing with Chirp 3 (diarization: {enable_diarization})")
+        # Use default model if none specified
+        selected_model = model or self.default_model
+
+        # Validate model
+        valid_models = [m['id'] for m in self.available_models]
+        if selected_model not in valid_models:
+            raise ValueError(f"Invalid model '{selected_model}'. Valid models: {', '.join(valid_models)}")
+
+        print(f"[Google Cloud] Transcribing with model '{selected_model}' (diarization: {enable_diarization})")
 
         # Read audio file
         with open(file_path, 'rb') as f:
@@ -116,7 +171,7 @@ class GoogleCloudProvider(TranscriptionProvider):
         config = cloud_speech.RecognitionConfig(
             auto_decoding_config=cloud_speech.AutoDetectDecodingConfig(),
             language_codes=language_codes,
-            model="chirp_3",
+            model=selected_model,
         )
 
         # Add diarization if enabled
@@ -146,6 +201,7 @@ class GoogleCloudProvider(TranscriptionProvider):
         chunk_files: List[str],
         language: Optional[str] = None,
         enable_diarization: bool = False,
+        model: Optional[str] = None,
         **kwargs
     ) -> str:
         """
@@ -155,6 +211,7 @@ class GoogleCloudProvider(TranscriptionProvider):
             chunk_files: List of audio chunk file paths
             language: Language code
             enable_diarization: Enable speaker diarization
+            model: Model to use (e.g., 'chirp', 'chirp_2', 'long', etc.)
             **kwargs: Additional options
 
         Returns:
@@ -172,6 +229,7 @@ class GoogleCloudProvider(TranscriptionProvider):
                 file_path=chunk_file,
                 language=language,
                 enable_diarization=enable_diarization,
+                model=model,
                 **kwargs
             )
             transcripts.append(transcript)
